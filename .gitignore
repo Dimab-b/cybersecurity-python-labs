@@ -1,0 +1,28 @@
+# Віртуальні середовища
+.venv/
+venv/
+env/
+
+# Кеш Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Середовища розробки
+.idea/
+.vscode/
+.vs/
+*.sln
+*.slnx
+
+# ОС
+.DS_Store
+Thumbs.db
+
+# Дані, що генеруються динамічно (можуть містити чутливу інформацію)
+labs/lab01/data/*.csv
+labs/lab01/data/*.json
+!labs/lab01/data/.gitkeep
