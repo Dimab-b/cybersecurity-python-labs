@@ -26,3 +26,9 @@ Thumbs.db
 labs/lab01/data/*.csv
 labs/lab01/data/*.json
 !labs/lab01/data/.gitkeep
+
+# ЛР №2: звіти та журнали, що створюються під час запуску
+labs/lab02/data/*.json
+labs/lab02/data/*.csv
+labs/lab02/data/*.log
+!labs/lab02/data/.gitkeep
