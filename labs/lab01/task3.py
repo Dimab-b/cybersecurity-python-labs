@@ -78,7 +78,7 @@ def create_users(users_list):
         print(f"Помилка доступу при створенні файлу {USERS_CSV}: {error}")
     except IOError as error:
         print(f"Помилка введення/виведення при записі в {USERS_CSV}: {error}")
-    
+
     return created
 
 
@@ -132,8 +132,8 @@ def _write_log_event(username, result):
             try:
                 with open(LOG_JSON, "r", encoding="utf-8") as log_file:
                     events = json.load(log_file)
-            except (json.JSONDecodeError, OSError) as error:
-                print(f"Застереження: Помилка зчитування журналу ({error}). Створюється новий журнал.")
+            except (json.JSONDecodeError, OSError):
+                print("Застереження: Помилка зчитування журналу")
                 events = []
 
         events.append(event)
@@ -165,7 +165,7 @@ def login(username: str, password: str) -> bool:
     """Перевіряє автентифікацію користувача за логіном і паролем."""
     if not username or not password:
         raise ValueError("Логін і пароль не можуть бути порожніми.")
-    
+
     users_db = read_users_db()
     for stored_login, stored_hash in users_db:
         if stored_login == username:

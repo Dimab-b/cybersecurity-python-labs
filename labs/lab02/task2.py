@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import json
-import logging
-import re
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
+import json
+import logging
 from pathlib import Path
+import re
 
 from shared.student import GROUP_NAME, STUDENT_NAME, VARIANT_NUMBER
 
@@ -71,47 +71,73 @@ def configure_logging(log_file: Path | None, level: str) -> None:
     logger.addHandler(console)
 
     if log_file is not None:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(log_file, encoding="utf-8")
-        handler.setLevel(logging.DEBUG)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        try:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(log_file, encoding="utf-8")
+            handler.setLevel(logging.DEBUG)
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+        except (PermissionError, OSError) as err:
+            logger.error(
+                "Не вдалося створити або відкрити файл логу %s: %s",
+                log_file,
+                err,
+            )
 
 
 def parse_auth_log(path: Path, year: int | None = None) -> list[AuthEvent]:
     """Розбирає файл auth.log і повертає список подій."""
-    if not path.is_file():
+    if not path.exists():
         raise FileNotFoundError(f"Файл журналу не знайдено: {path}")
+    if not path.is_file():
+        raise IsADirectoryError(f"Вказаний шлях є директорією, а не файлом: {path}")
 
     reference_year = year or datetime.now().year
     events: list[AuthEvent] = []
     logger.info("Analyzing authentication events in %s...", path)
 
-    with path.open(encoding="utf-8") as stream:
-        for line_number, raw_line in enumerate(stream, 1):
-            match = AUTH_PATTERN.match(raw_line.strip())
-            if match is None:
-                logger.debug(
-                    "Рядок %d пропущено (не розпізнано).", line_number
+    try:
+        with path.open(encoding="utf-8", errors="replace") as stream:
+            for line_number, raw_line in enumerate(stream, 1):
+                match = AUTH_PATTERN.match(raw_line.strip())
+                if match is None:
+                    logger.debug(
+                        "Рядок %d пропущено (не розпізнано).", line_number
+                    )
+                    continue
+
+                try:
+                    parsed = datetime.strptime(
+                        f"{reference_year} {match['timestamp']}",
+                        "%Y %b %d %H:%M:%S",
+                    )
+                except ValueError as err:
+                    logger.warning(
+                        "Некоректна дата у рядку %d: %s", line_number, err
+                    )
+                    continue
+
+                events.append(
+                    AuthEvent(
+                        timestamp=parsed,
+                        host=match["host"],
+                        username=match["user"],
+                        ip=match["ip"],
+                        result=match["result"],
+                        invalid_user=bool(match["invalid"]),
+                    )
                 )
-                continue
-            parsed = datetime.strptime(
-                f"{reference_year} {match['timestamp']}", "%Y %b %d %H:%M:%S"
-            )
-            events.append(
-                AuthEvent(
-                    timestamp=parsed,
-                    host=match["host"],
-                    username=match["user"],
-                    ip=match["ip"],
-                    result=match["result"],
-                    invalid_user=bool(match["invalid"]),
-                )
-            )
+    except PermissionError:
+        logger.error("Відмовлено в доступі при читанні файлу: %s", path)
+        raise
+    except OSError as err:
+        logger.error("Помилка вводу/виводу при читанні файлу %s: %s", path, err)
+        raise
+
     return events
 
 
-def _max_window(
+def _find_max_window(
     failures: list[tuple[datetime, str]], window: timedelta
 ) -> tuple[int, datetime | None, datetime | None, list[str]]:
     """Знаходить вікно з максимальною кількістю невдалих спроб."""
@@ -154,7 +180,7 @@ def detect_bruteforce(
 
     findings: list[BruteforceFinding] = []
     for ip, entries in failures_by_ip.items():
-        count, start, end, users = _max_window(entries, window)
+        count, start, end, users = _find_max_window(entries, window)
         if count >= threshold and start is not None and end is not None:
             findings.append(
                 BruteforceFinding(
@@ -216,12 +242,22 @@ def build_report(
 
 
 def save_report(report: dict, output: Path) -> None:
-    """Зберігає звіт у JSON-файл."""
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    """Зберігає звіт у JSON-файл із захистом від помилок запису."""
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        content = json.dumps(report, ensure_ascii=False, indent=2)
+        output.write_text(content, encoding="utf-8")
+    except PermissionError:
+        logger.error("Відмовлено в доступі при записі звіту у файл: %s", output)
+        raise
+    except (TypeError, ValueError) as err:
+        logger.error("Помилка серіалізації даних у JSON: %s", err)
+        raise
+    except OSError as err:
+        logger.error(
+            "Помилка вводу/виводу при збереженні звіту в %s: %s", output, err
+        )
+        raise
 
 
 def print_summary(report: dict, findings: list[BruteforceFinding]) -> None:
@@ -266,8 +302,8 @@ def run(args: argparse.Namespace) -> int:
     logger.info("Loading authentication log from %s...", source)
     try:
         events = parse_auth_log(source)
-    except FileNotFoundError as error:
-        logger.error("%s", error)
+    except (FileNotFoundError, IsADirectoryError, PermissionError, OSError) as error:
+        logger.error("Не вдалося обробити файл: %s", error)
         return 1
 
     if not events:
@@ -281,8 +317,13 @@ def run(args: argparse.Namespace) -> int:
     print_summary(report, findings)
 
     output = Path(args.output_json)
-    save_report(report, output)
-    logger.info("Exported blocklist to %s", output)
+    try:
+        save_report(report, output)
+        logger.info("Exported blocklist to %s", output)
+    except (PermissionError, OSError, ValueError) as error:
+        logger.error("Не вдалося зберегти звіт: %s", error)
+        return 1
+
     return 0
 
 

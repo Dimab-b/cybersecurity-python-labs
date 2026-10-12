@@ -106,7 +106,7 @@ def print_report(passwords, verdicts):
         print(f"{index:<4}{password:<22}{verdict:<18}{unique}")
     print("-" * 66)
     print(f"Усього проаналізовано паролів: {len(passwords)}")
-
+    -
 
 def main():
     """Виконує повний аналіз списку паролів варіанта."""
