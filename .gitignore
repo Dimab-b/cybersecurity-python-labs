@@ -32,3 +32,9 @@ labs/lab02/data/*.json
 labs/lab02/data/*.csv
 labs/lab02/data/*.log
 !labs/lab02/data/.gitkeep
+
+# ЛР №3: робочий файл бази SQLite (відтворюється зі schema.sql + seed.json)
+labs/lab03/data/*.sqlite3
+labs/lab03/data/*.sqlite3-*
+labs/lab03/data/*.db
+labs/lab03/data/*.db-*
