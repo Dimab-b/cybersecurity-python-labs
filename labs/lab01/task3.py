@@ -132,8 +132,16 @@ def _write_log_event(username, result):
             try:
                 with open(LOG_JSON, "r", encoding="utf-8") as log_file:
                     events = json.load(log_file)
+<<<<<<< HEAD
             except (json.JSONDecodeError, OSError):
                 print("Застереження: Помилка зчитування журналу")
+=======
+            except (json.JSONDecodeError, OSError) as error:
+                print(
+                    "Застереження: Помилка зчитування журналу "
+                    f"({error}). Створюється новий журнал."
+                )
+>>>>>>> 216d7d68a9dd6504a7516515643cfabe5d068fe8
                 events = []
 
         events.append(event)
